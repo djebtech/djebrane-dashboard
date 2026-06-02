@@ -4,8 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:server": "tsx server.ts",
     "build": "next build",
     "start": "next start",
+    "start:server": "NODE_ENV=production tsx server.ts",
     "lint": "next lint"
   },
   "dependencies": {
@@ -17,17 +19,25 @@
     "@radix-ui/react-tooltip": "^1.1.4",
     "@supabase/ssr": "^0.5.1",
     "@supabase/supabase-js": "^2.45.4",
+    "@whiskeysockets/baileys": "^7.0.0-rc13",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dotenv": "^17.4.2",
     "lucide-react": "^0.460.0",
     "next": "14.2.35",
+    "pino": "^10.3.1",
+    "qrcode": "^1.5.4",
+    "qrcode.react": "^4.2.0",
     "react": "^18",
     "react-dom": "^18",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
     "tailwind-merge": "^2.5.4",
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
-    "@types/node": "^20",
+    "@types/node": "^20.19.41",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.5.0",
@@ -35,6 +45,7 @@
     "eslint-config-next": "14.2.35",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
+    "tsx": "^4.22.4",
     "typescript": "^5"
   }
 }
