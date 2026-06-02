@@ -1,109 +1,242 @@
-import { Plus, Megaphone, BarChart2, Play, Pause, CheckCircle } from "lucide-react";
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { io, Socket } from "socket.io-client";
+import {
+  Plus, Megaphone, Play, Pause, BarChart2, Trash2,
+  Loader2, RefreshCw, CheckCircle,
+} from "lucide-react";
+import { CreateCampaignModal } from "@/components/dashboard/CreateCampaignModal";
 
-const campaigns = [
-  { id: "1", name: "Summer Promo 2026", status: "active", contacts: 8420, sent: 8420, open: 74, reply: 12, fail: 38, account: "Main Account", created: "2026-05-28" },
-  { id: "2", name: "Re-engagement Wave 3", status: "active", contacts: 5000, sent: 3100, open: 61, reply: 8, fail: 55, account: "Campaign Account 2", created: "2026-05-30" },
-  { id: "3", name: "Product Launch V2", status: "paused", contacts: 15000, sent: 12000, open: 70, reply: 15, fail: 120, account: "Business API", created: "2026-05-20" },
-  { id: "4", name: "Cold Outreach Batch", status: "completed", contacts: 5000, sent: 5000, open: 58, reply: 6, fail: 210, account: "Main Account", created: "2026-05-10" },
-  { id: "5", name: "Q2 Newsletter", status: "draft", contacts: 0, sent: 0, open: 0, reply: 0, fail: 0, account: "Business API", created: "2026-06-01" },
-];
+interface Campaign {
+  id: string;
+  name: string;
+  status: "draft" | "active" | "paused" | "completed";
+  total_contacts: number;
+  sent_count: number;
+  open_count: number;
+  reply_count: number;
+  fail_count: number;
+  started_at: string | null;
+  created_at: string;
+}
 
-const statusColors: Record<string, string> = {
-  active: "text-[#25D366] bg-[#25D366]/10",
-  paused: "text-amber-400 bg-amber-400/10",
-  completed: "text-blue-400 bg-blue-400/10",
-  draft: "text-white/40 bg-white/5",
-};
+interface Progress { campaignId: string; sent: number; total: number; failed: number; }
 
-const statusIcon: Record<string, React.ReactNode> = {
-  active: <Play className="h-3 w-3" />,
-  paused: <Pause className="h-3 w-3" />,
-  completed: <CheckCircle className="h-3 w-3" />,
-  draft: <Megaphone className="h-3 w-3" />,
+const STATUS_COLOR: Record<string, string> = {
+  active:    "text-[#25D366] bg-[#25D366]/10",
+  paused:    "text-amber-400 bg-amber-400/10",
+  completed: "text-blue-400  bg-blue-400/10",
+  draft:     "text-white/40  bg-white/5",
 };
 
 export default function CampaignsPage() {
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [liveProgress, setLiveProgress] = useState<Record<string, Progress>>({});
+  const [loading, setLoading] = useState(true);
+  const [acting, setActing] = useState<Record<string, string>>({});
+  const [showModal, setShowModal] = useState(false);
+  const socketRef = useRef<Socket | null>(null);
+
+  const fetchCampaigns = useCallback(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await fetch("/api/campaigns/list" as any).catch(() => null);
+    // fall back to Supabase-backed endpoint
+    const res2 = await fetch("/api/campaigns/status");
+    if (res2.ok) {
+      setCampaigns(await res2.json());
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    loadCampaigns();
+    const s = io(window.location.origin, { path: "/api/socket", transports: ["websocket", "polling"] });
+    socketRef.current = s;
+
+    s.on("campaign_progress", (p: Progress) => {
+      setLiveProgress(prev => ({ ...prev, [p.campaignId]: p }));
+      setCampaigns(prev => prev.map(c =>
+        c.id === p.campaignId ? { ...c, sent_count: p.sent, fail_count: p.failed } : c
+      ));
+    });
+
+    s.on("campaign_completed", ({ campaignId }: { campaignId: string }) => {
+      setCampaigns(prev => prev.map(c => c.id === campaignId ? { ...c, status: "completed" } : c));
+    });
+
+    return () => { s.disconnect(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function loadCampaigns() {
+    setLoading(true);
+    const res = await fetch("/api/campaigns/status");
+    if (res.ok) setCampaigns(await res.json());
+    setLoading(false);
+  }
+
+  async function act(campaignId: string, action: "start" | "pause" | "resume" | "delete") {
+    setActing(p => ({ ...p, [campaignId]: action }));
+    try {
+      if (action === "delete") {
+        if (!confirm("Delete this campaign? This also removes all message logs.")) return;
+        await fetch(`/api/campaigns/${campaignId}/delete`, { method: "DELETE" });
+        setCampaigns(p => p.filter(c => c.id !== campaignId));
+      } else {
+        await fetch(`/api/campaigns/${campaignId}/${action}`, { method: "POST" });
+        const statusMap = { start: "active", pause: "paused", resume: "active" } as const;
+        setCampaigns(p => p.map(c => c.id === campaignId ? { ...c, status: statusMap[action] } : c));
+      }
+    } finally {
+      setActing(p => ({ ...p, [campaignId]: "" }));
+    }
+  }
+
+  function isActing(id: string) { return !!acting[id]; }
+
+  function progressPct(c: Campaign) {
+    const live = liveProgress[c.id];
+    const sent = live?.sent ?? c.sent_count;
+    const total = c.total_contacts;
+    if (!total) return 0;
+    return Math.min(100, Math.round((sent / total) * 100));
+  }
+
+  function openRate(c: Campaign) {
+    const sent = c.sent_count;
+    if (!sent) return "—";
+    return Math.round((c.open_count / sent) * 100) + "%";
+  }
+
+  function replyRate(c: Campaign) {
+    const sent = c.sent_count;
+    if (!sent) return "—";
+    return Math.round((c.reply_count / sent) * 100) + "%";
+  }
+
   return (
-    <div className="p-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">Campaigns</h1>
-          <p className="text-sm text-white/40 mt-1">Create and manage outreach campaigns</p>
+    <>
+      <div className="p-8 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-white tracking-tight">Campaigns</h1>
+            <p className="text-sm text-white/40 mt-1">Create and manage outreach campaigns</p>
+          </div>
+          <button onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 rounded-lg bg-[#25D366] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1fb855] transition-colors"
+          >
+            <Plus className="h-4 w-4" /> New Campaign
+          </button>
         </div>
-        <button className="flex items-center gap-2 rounded-lg bg-[#25D366] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1fb855] transition-colors">
-          <Plus className="h-4 w-4" />
-          New Campaign
-        </button>
+
+        {loading ? (
+          <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 text-[#25D366] animate-spin" /></div>
+        ) : campaigns.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="h-16 w-16 rounded-2xl bg-white/5 flex items-center justify-center mb-4">
+              <Megaphone className="h-8 w-8 text-white/20" />
+            </div>
+            <p className="text-sm font-medium text-white/40">No campaigns yet</p>
+            <p className="text-xs text-white/20 mt-1">Click &ldquo;New Campaign&rdquo; to launch your first outreach</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {campaigns.map((c) => {
+              const pct = progressPct(c);
+              const live = liveProgress[c.id];
+              const sentDisplay = live?.sent ?? c.sent_count;
+              return (
+                <div key={c.id} className="rounded-xl border border-white/5 bg-white/[0.03] hover:border-white/10 transition-colors">
+                  <div className="flex items-center gap-4 px-5 py-4">
+                    {/* Icon */}
+                    <div className="h-10 w-10 rounded-xl bg-white/5 flex items-center justify-center shrink-0">
+                      {c.status === "active" ? <RefreshCw className="h-5 w-5 text-[#25D366] animate-spin" style={{ animationDuration: "3s" }} /> :
+                       c.status === "completed" ? <CheckCircle className="h-5 w-5 text-blue-400" /> :
+                       <Megaphone className="h-5 w-5 text-white/30" />}
+                    </div>
+
+                    {/* Name + meta */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Link href={`/dashboard/campaigns/${c.id}`} className="text-sm font-semibold text-white hover:text-[#25D366] transition-colors truncate">
+                          {c.name}
+                        </Link>
+                        <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full capitalize shrink-0 ${STATUS_COLOR[c.status]}`}>
+                          {c.status}
+                        </span>
+                      </div>
+
+                      {/* Progress bar */}
+                      {c.total_contacts > 0 && (
+                        <div className="mt-2 space-y-1">
+                          <div className="flex items-center justify-between text-[11px] text-white/30">
+                            <span>{sentDisplay.toLocaleString()} / {c.total_contacts.toLocaleString()} sent</span>
+                            <span>{pct}%</span>
+                          </div>
+                          <div className="h-1 rounded-full bg-white/10 overflow-hidden">
+                            <div className="h-full rounded-full bg-[#25D366] transition-all duration-500" style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Stats */}
+                    <div className="hidden md:flex items-center gap-5 text-xs text-white/40 tabular-nums shrink-0">
+                      <span className="text-[#25D366]">{openRate(c)} open</span>
+                      <span className="text-amber-400">{replyRate(c)} reply</span>
+                      {c.fail_count > 0 && <span className="text-red-400">{c.fail_count} failed</span>}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {c.status === "draft" && (
+                        <button onClick={() => act(c.id, "start")} disabled={isActing(c.id)}
+                          title="Start" className="p-2 rounded-lg bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 disabled:opacity-40 transition-colors"
+                        >
+                          {acting[c.id] === "start" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                        </button>
+                      )}
+                      {c.status === "active" && (
+                        <button onClick={() => act(c.id, "pause")} disabled={isActing(c.id)}
+                          title="Pause" className="p-2 rounded-lg bg-amber-400/10 text-amber-400 hover:bg-amber-400/20 disabled:opacity-40 transition-colors"
+                        >
+                          {acting[c.id] === "pause" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pause className="h-4 w-4" />}
+                        </button>
+                      )}
+                      {c.status === "paused" && (
+                        <button onClick={() => act(c.id, "resume")} disabled={isActing(c.id)}
+                          title="Resume" className="p-2 rounded-lg bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 disabled:opacity-40 transition-colors"
+                        >
+                          {acting[c.id] === "resume" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                        </button>
+                      )}
+                      <Link href={`/dashboard/campaigns/${c.id}`}
+                        className="p-2 rounded-lg bg-white/5 text-white/50 hover:bg-white/10 hover:text-white transition-colors" title="Analytics"
+                      >
+                        <BarChart2 className="h-4 w-4" />
+                      </Link>
+                      <button onClick={() => act(c.id, "delete")} disabled={isActing(c.id)}
+                        title="Delete" className="p-2 rounded-lg bg-white/5 text-white/30 hover:bg-red-500/10 hover:text-red-400 disabled:opacity-40 transition-colors"
+                      >
+                        {acting[c.id] === "delete" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      <div className="rounded-xl border border-white/5 bg-white/[0.03] overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-white/5">
-                <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-white/30">Campaign</th>
-                <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-white/30">Status</th>
-                <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-wider text-white/30">Contacts</th>
-                <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-wider text-white/30">Sent</th>
-                <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-wider text-white/30">Open %</th>
-                <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-wider text-white/30">Reply %</th>
-                <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-wider text-white/30">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {campaigns.map((c) => (
-                <tr key={c.id} className="hover:bg-white/[0.02] transition-colors">
-                  <td className="px-6 py-4">
-                    <div>
-                      <Link
-                        href={`/dashboard/campaigns/${c.id}`}
-                        className="text-sm font-medium text-white hover:text-[#25D366] transition-colors"
-                      >
-                        {c.name}
-                      </Link>
-                      <p className="text-xs text-white/30 mt-0.5">{c.account}</p>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full capitalize ${statusColors[c.status]}`}>
-                      {statusIcon[c.status]}
-                      {c.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right text-sm text-white/60 tabular-nums">
-                    {c.contacts.toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 text-right text-sm text-white/60 tabular-nums">
-                    {c.sent.toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <span className="text-sm font-medium text-[#25D366] tabular-nums">
-                      {c.open > 0 ? `${c.open}%` : "—"}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <span className="text-sm font-medium text-amber-400 tabular-nums">
-                      {c.reply > 0 ? `${c.reply}%` : "—"}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Link
-                        href={`/dashboard/campaigns/${c.id}`}
-                        className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-white/5 text-white/50 hover:bg-white/10 hover:text-white transition-colors"
-                      >
-                        <BarChart2 className="h-3 w-3" />
-                        Analytics
-                      </Link>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+      {showModal && (
+        <CreateCampaignModal
+          onClose={() => setShowModal(false)}
+          onCreated={() => { loadCampaigns(); setShowModal(false); }}
+        />
+      )}
+    </>
   );
 }

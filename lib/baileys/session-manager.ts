@@ -11,6 +11,7 @@ import QRCode from "qrcode";
 import pino from "pino";
 import path from "path";
 import fs from "fs";
+import { createAdminClient } from "../supabase/admin";
 
 const SESSIONS_DIR = path.join(process.cwd(), "sessions");
 const HEALTH_SYNC_INTERVAL_MS = 30 * 60 * 1000; // 30 min
@@ -155,8 +156,12 @@ export class BaileysSessionManager {
           msg.message.conversation ??
           msg.message.extendedTextMessage?.text ??
           "";
+
         this.io.emit("incoming_message", { accountId, from, message: text });
         this.io.to(`account:${accountId}`).emit("incoming_message", { accountId, from, message: text });
+
+        // Handle reply — update message_logs and campaign counters
+        await this._handleIncomingReply(accountId, from, text);
       }
     });
   }
@@ -273,6 +278,82 @@ export class BaileysSessionManager {
     score -= entry.status.dailyLimitHitStreak * 20;
     score += entry.status.cleanSendingDays * 5;
     entry.status.healthScore = Math.max(0, Math.min(100, score));
+  }
+
+  private async _handleIncomingReply(
+    accountId: string,
+    fromJid: string,
+    _text: string
+  ): Promise<void> {
+    try {
+      // Normalize JID → phone number: "213XXXXXXXXX@s.whatsapp.net" → "213XXXXXXXXX"
+      const phone = fromJid.replace(/@.*/, "").replace(/:\d+$/, "");
+      if (!phone) return;
+
+      const db = createAdminClient();
+
+      // Find the contact by phone number (strip non-digits for comparison)
+      const { data: contacts } = await (db as any)
+        .from("contacts")
+        .select("id")
+        .filter("phone_number", "ilike", `%${phone.slice(-9)}`) as {
+          data: { id: string }[] | null;
+        };
+
+      if (!contacts?.length) return;
+      const contactIds = contacts.map((c) => c.id);
+
+      // Find active/sent message_logs for this contact
+      const { data: logs } = await (db as any)
+        .from("message_logs")
+        .select("id, campaign_id, status")
+        .in("contact_id", contactIds)
+        .in("status", ["sent", "delivered", "opened"])
+        .order("sent_at", { ascending: false })
+        .limit(5) as { data: { id: string; campaign_id: string; status: string }[] | null };
+
+      if (!logs?.length) return;
+
+      const now = new Date().toISOString();
+      const updatedCampaigns = new Set<string>();
+
+      for (const log of logs) {
+        await (db as any)
+          .from("message_logs")
+          .update({ status: "replied", replied_at: now })
+          .eq("id", log.id);
+
+        if (!updatedCampaigns.has(log.campaign_id)) {
+          await (db as any).rpc("increment_campaign_reply", { p_campaign_id: log.campaign_id });
+          updatedCampaigns.add(log.campaign_id);
+        }
+
+        // Check stop_on_reply for sequences linked to this campaign
+        const { data: sequences } = await (db as any)
+          .from("sequences")
+          .select("id, stop_on_reply")
+          .eq("campaign_id", log.campaign_id)
+          .eq("stop_on_reply", true) as { data: { id: string }[] | null };
+
+        if (sequences?.length) {
+          // Mark remaining queued logs for this contact as 'failed' (stopped by reply)
+          await (db as any)
+            .from("message_logs")
+            .update({ status: "failed", error_message: "Stopped: contact replied" })
+            .in("contact_id", contactIds)
+            .eq("campaign_id", log.campaign_id)
+            .eq("status", "queued");
+        }
+      }
+
+      // Emit real-time update for each affected campaign
+      for (const campaignId of updatedCampaigns) {
+        this.io.emit("message_status_update", { campaignId, contactPhone: phone, status: "replied" });
+        this.io.to(`campaign:${campaignId}`).emit("message_status_update", { campaignId, contactPhone: phone, status: "replied" });
+      }
+    } catch (err) {
+      console.error("[SessionManager] _handleIncomingReply error:", err);
+    }
   }
 
   private startHealthSync(): void {
