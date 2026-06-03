@@ -5,6 +5,7 @@ import next from "next";
 import { initSocketServer } from "./lib/baileys/socket-server";
 import { BaileysSessionManager } from "./lib/baileys/session-manager";
 import { CampaignQueue } from "./lib/campaign/queue";
+import { SequenceEngine } from "./lib/sequences/sequence-engine";
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "localhost";
@@ -39,17 +40,24 @@ app.prepare().then(() => {
   global.campaignQueue = campaignQueue;
   console.log("[Server] Campaign queue ready");
 
+  // Initialise Sequence Engine (singleton)
+  const sequenceEngine = new SequenceEngine(io);
+  global.sequenceEngine = sequenceEngine;
+  console.log("[Server] Sequence engine ready");
+
   // Graceful shutdown
   process.on("SIGTERM", () => {
     console.log("[Server] SIGTERM received — shutting down");
     sessionManager.shutdown();
     campaignQueue.shutdown();
+    sequenceEngine.shutdown();
     process.exit(0);
   });
   process.on("SIGINT", () => {
     console.log("[Server] SIGINT received — shutting down");
     sessionManager.shutdown();
     campaignQueue.shutdown();
+    sequenceEngine.shutdown();
     process.exit(0);
   });
 

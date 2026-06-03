@@ -160,7 +160,7 @@ export class BaileysSessionManager {
         this.io.emit("incoming_message", { accountId, from, message: text });
         this.io.to(`account:${accountId}`).emit("incoming_message", { accountId, from, message: text });
 
-        // Handle reply — update message_logs and campaign counters
+        // Handle reply — update message_logs + campaign counters + unenroll from sequences
         await this._handleIncomingReply(accountId, from, text);
       }
     });
@@ -351,6 +351,10 @@ export class BaileysSessionManager {
         this.io.emit("message_status_update", { campaignId, contactPhone: phone, status: "replied" });
         this.io.to(`campaign:${campaignId}`).emit("message_status_update", { campaignId, contactPhone: phone, status: "replied" });
       }
+
+      // Unenroll from stop_on_reply sequences
+      const replyContactIds = contacts.map((c) => c.id);
+      await global.sequenceEngine?.handleContactReply(replyContactIds);
     } catch (err) {
       console.error("[SessionManager] _handleIncomingReply error:", err);
     }
