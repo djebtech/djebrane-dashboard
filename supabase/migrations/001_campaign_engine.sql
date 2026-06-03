@@ -13,9 +13,17 @@ ALTER TABLE campaigns
 ALTER TABLE message_logs ALTER COLUMN account_id DROP NOT NULL;
 
 -- 3. Unique constraint so we can safely upsert (one log per contact per campaign)
-ALTER TABLE message_logs
-  ADD CONSTRAINT IF NOT EXISTS message_logs_campaign_contact_key
-  UNIQUE (campaign_id, contact_id);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'message_logs_campaign_contact_key'
+  ) THEN
+    ALTER TABLE message_logs
+      ADD CONSTRAINT message_logs_campaign_contact_key
+      UNIQUE (campaign_id, contact_id);
+  END IF;
+END $$;
 
 -- 4. Indexes for queue processing performance
 CREATE INDEX IF NOT EXISTS idx_message_logs_status_campaign
