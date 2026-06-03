@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import {
   X, ChevronRight, ChevronLeft, Megaphone, Users, MessageCircle,
-  Clock, Rocket, CheckCircle2, Loader2, RefreshCw,
+  Clock, Rocket, CheckCircle2, Loader2, RefreshCw, FileText,
 } from "lucide-react";
+import { TemplatePicker } from "./TemplatePicker";
+import { toast } from "sonner";
 
 interface Account { id: string; name: string; phone_number: string; status: string; }
 interface ContactList { id: string; name: string; contact_count: number; }
@@ -42,6 +44,7 @@ export function CreateCampaignModal({ onClose, onCreated }: Props) {
   const [fetching, setFetching] = useState(true);
   const [error, setError] = useState("");
   const [launched, setLaunched] = useState(false);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -227,14 +230,31 @@ export function CreateCampaignModal({ onClose, onCreated }: Props) {
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Message Template</label>
-                      <div className="flex gap-1">
+                      <div className="flex items-center gap-2">
+                        <button type="button" onClick={() => setShowTemplatePicker(p => !p)}
+                          className="flex items-center gap-1 text-[11px] text-[#25D366] hover:text-[#1fb855] transition-colors"
+                        >
+                          <FileText className="h-3 w-3" /> Use template
+                        </button>
+                        <div className="flex gap-1">
                         {VARS.map((v) => (
                           <button key={v} onClick={() => insertVar(v)}
                             className="text-[11px] px-2 py-0.5 rounded-md bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 transition-colors font-mono"
                           >{v}</button>
                         ))}
+                        </div>
                       </div>
                     </div>
+                    {showTemplatePicker && (
+                      <TemplatePicker
+                        onSelect={(body, _id) => {
+                          set("messageTemplate", body);
+                          setShowTemplatePicker(false);
+                          toast.success("Template applied");
+                        }}
+                        onClose={() => setShowTemplatePicker(false)}
+                      />
+                    )}
                     <textarea
                       value={form.messageTemplate}
                       onChange={(e) => set("messageTemplate", e.target.value)}
