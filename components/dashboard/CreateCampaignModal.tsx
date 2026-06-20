@@ -111,12 +111,14 @@ export function CreateCampaignModal({ onClose, onCreated }: Props) {
       }
 
       setLaunched(true);
+      toast.success(form.sendNow ? "Campaign launched" : "Campaign created");
       setTimeout(() => {
         onCreated(createData.campaignId);
         onClose();
       }, 1800);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
+      toast.error("Failed to launch campaign");
     } finally {
       setLoading(false);
     }

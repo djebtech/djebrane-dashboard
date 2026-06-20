@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   X, ChevronRight, ChevronLeft, GitBranch, Plus, Trash2,
   MessageCircle, Clock, CheckCircle2, Loader2, Users, Settings,
@@ -158,9 +159,11 @@ export function CreateSequenceModal({ onClose, onCreated, editData }: Props) {
       }
 
       setDone(true);
+      toast.success("Sequence created");
       setTimeout(() => { onCreated(data.sequenceId); onClose(); }, 1600);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
+      toast.error("Failed to create sequence");
     } finally {
       setLoading(false);
     }

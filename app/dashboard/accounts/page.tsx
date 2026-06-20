@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
+import { toast } from "sonner";
 import {
   Plus,
   Smartphone,
@@ -14,6 +15,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { ConnectAccountModal } from "@/components/dashboard/ConnectAccountModal";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { Account } from "@/lib/types";
 
 type LiveStatus = "connected" | "warming" | "disconnected";
@@ -62,6 +64,7 @@ export default function AccountsPage() {
               : a
           )
         );
+        toast.success("Account connected");
       }
     );
 
@@ -73,6 +76,7 @@ export default function AccountsPage() {
             a.id === accountId ? { ...a, status: "disconnected", _live: "disconnected" } : a
           )
         );
+        toast.error("Connection lost");
       }
     );
 
@@ -93,6 +97,7 @@ export default function AccountsPage() {
       // Socket.io will emit qr_code if a new QR is needed
     } catch (err) {
       console.error("Reconnect failed:", err);
+      toast.error("Reconnect failed");
     } finally {
       setActionLoading((p) => ({ ...p, [accountId]: "" }));
     }
@@ -109,8 +114,10 @@ export default function AccountsPage() {
       setAccounts((prev) =>
         prev.map((a) => (a.id === accountId ? { ...a, status: "disconnected" } : a))
       );
+      toast.success("Account disconnected");
     } catch (err) {
       console.error("Disconnect failed:", err);
+      toast.error("Disconnect failed");
     } finally {
       setActionLoading((p) => ({ ...p, [accountId]: "" }));
     }
@@ -126,8 +133,10 @@ export default function AccountsPage() {
         body: JSON.stringify({ accountId, deleteAccount: true }),
       });
       setAccounts((prev) => prev.filter((a) => a.id !== accountId));
+      toast.success("Account deleted");
     } catch (err) {
       console.error("Delete failed:", err);
+      toast.error("Delete failed");
     } finally {
       setActionLoading((p) => ({ ...p, [accountId]: "" }));
     }
@@ -176,8 +185,8 @@ export default function AccountsPage() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-6 w-6 text-[#25D366] animate-spin" />
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-48 w-full" />)}
           </div>
         ) : accounts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -186,8 +195,14 @@ export default function AccountsPage() {
             </div>
             <p className="text-sm font-medium text-white/40">No accounts connected yet</p>
             <p className="text-xs text-white/20 mt-1">
-              Click &ldquo;Connect new number&rdquo; to scan your first QR code
+              Scan a QR code to link your first WhatsApp number
             </p>
+            <button
+              onClick={() => setShowModal(true)}
+              className="mt-5 flex items-center gap-2 rounded-lg bg-[#25D366] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1fb855] transition-colors"
+            >
+              <Plus className="h-4 w-4" /> Connect your first number
+            </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">

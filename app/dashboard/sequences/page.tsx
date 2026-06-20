@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { io, Socket } from "socket.io-client";
+import { toast } from "sonner";
 import {
   Plus, GitBranch, Play, Pause, BarChart2, Trash2,
   Loader2, ChevronRight, Users, Clock,
 } from "lucide-react";
 import { CreateSequenceModal } from "@/components/dashboard/CreateSequenceModal";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface Sequence {
   id: string; name: string; status: string;
@@ -51,11 +53,16 @@ export default function SequencesPage() {
         if (!confirm("Delete this sequence and all enrollments?")) return;
         await fetch(`/api/sequences/${id}`, { method: "DELETE" });
         setSequences((p) => p.filter((s) => s.id !== id));
+        toast.success("Sequence deleted");
       } else {
         await fetch(`/api/sequences/${id}/${action}`, { method: "POST" });
         const statusMap = { pause: "paused", resume: "active" } as const;
         setSequences((p) => p.map((s) => s.id === id ? { ...s, status: statusMap[action] } : s));
+        toast.success(action === "pause" ? "Sequence paused" : "Sequence resumed");
       }
+    } catch (err) {
+      console.error(`Sequence ${action} failed:`, err);
+      toast.error(`Failed to ${action} sequence`);
     } finally {
       setActing((p) => ({ ...p, [id]: "" }));
     }
@@ -77,14 +84,31 @@ export default function SequencesPage() {
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 text-[#25D366] animate-spin" /></div>
+          <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-5 py-4">
+                <Skeleton className="h-10 w-10 rounded-xl shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-48" />
+                  <Skeleton className="h-3 w-72 max-w-full" />
+                </div>
+                <Skeleton className="h-8 w-20" />
+              </div>
+            ))}
+          </div>
         ) : sequences.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="h-16 w-16 rounded-2xl bg-white/5 flex items-center justify-center mb-4">
               <GitBranch className="h-8 w-8 text-white/20" />
             </div>
             <p className="text-sm font-medium text-white/40">No sequences yet</p>
-            <p className="text-xs text-white/20 mt-1">Build your first drip flow to nurture leads automatically</p>
+            <p className="text-xs text-white/20 mt-1">Nurture leads automatically with a drip flow</p>
+            <button
+              onClick={() => setShowModal(true)}
+              className="mt-5 flex items-center gap-2 rounded-lg bg-[#25D366] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1fb855] transition-colors"
+            >
+              <Plus className="h-4 w-4" /> Build your first sequence
+            </button>
           </div>
         ) : (
           <div className="space-y-3">

@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { io, Socket } from "socket.io-client";
+import { toast } from "sonner";
 import {
   Plus, Megaphone, Play, Pause, BarChart2, Trash2,
   Loader2, RefreshCw, CheckCircle,
 } from "lucide-react";
 import { CreateCampaignModal } from "@/components/dashboard/CreateCampaignModal";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface Campaign {
   id: string;
@@ -84,11 +86,16 @@ export default function CampaignsPage() {
         if (!confirm("Delete this campaign? This also removes all message logs.")) return;
         await fetch(`/api/campaigns/${campaignId}/delete`, { method: "DELETE" });
         setCampaigns(p => p.filter(c => c.id !== campaignId));
+        toast.success("Campaign deleted");
       } else {
         await fetch(`/api/campaigns/${campaignId}/${action}`, { method: "POST" });
         const statusMap = { start: "active", pause: "paused", resume: "active" } as const;
         setCampaigns(p => p.map(c => c.id === campaignId ? { ...c, status: statusMap[action] } : c));
+        toast.success(action === "pause" ? "Campaign paused" : action === "resume" ? "Campaign resumed" : "Campaign launched");
       }
+    } catch (err) {
+      console.error(`Campaign ${action} failed:`, err);
+      toast.error(`Failed to ${action} campaign`);
     } finally {
       setActing(p => ({ ...p, [campaignId]: "" }));
     }
@@ -132,14 +139,22 @@ export default function CampaignsPage() {
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 text-[#25D366] animate-spin" /></div>
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[72px] w-full rounded-xl" />)}
+          </div>
         ) : campaigns.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="h-16 w-16 rounded-2xl bg-white/5 flex items-center justify-center mb-4">
               <Megaphone className="h-8 w-8 text-white/20" />
             </div>
             <p className="text-sm font-medium text-white/40">No campaigns yet</p>
-            <p className="text-xs text-white/20 mt-1">Click &ldquo;New Campaign&rdquo; to launch your first outreach</p>
+            <p className="text-xs text-white/20 mt-1">Launch your first outreach in a few clicks</p>
+            <button
+              onClick={() => setShowModal(true)}
+              className="mt-5 flex items-center gap-2 rounded-lg bg-[#25D366] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1fb855] transition-colors"
+            >
+              <Plus className="h-4 w-4" /> Create your first campaign
+            </button>
           </div>
         ) : (
           <div className="space-y-3">
