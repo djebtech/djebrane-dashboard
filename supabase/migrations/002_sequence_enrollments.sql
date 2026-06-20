@@ -1,5 +1,7 @@
 -- Sequence engine additions
--- Run this in: Supabase Dashboard → SQL Editor
+-- CLI-managed migration. Apply with: supabase db push
+-- (Originally applied by hand in the Supabase SQL Editor; registered as
+--  already-applied via `supabase migration repair --status applied 002`.)
 
 -- 1. Extend sequences table with account targeting
 ALTER TABLE sequences

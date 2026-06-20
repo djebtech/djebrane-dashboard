@@ -1,5 +1,7 @@
 -- Campaign engine additions
--- Run this in: Supabase Dashboard → SQL Editor
+-- CLI-managed migration. Apply with: supabase db push
+-- (Originally applied by hand in the Supabase SQL Editor; registered as
+--  already-applied via `supabase migration repair --status applied 001`.)
 
 -- 1. Add campaign engine fields to campaigns table
 ALTER TABLE campaigns

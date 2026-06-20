@@ -1,5 +1,7 @@
 -- Templates table
--- Run this in: Supabase Dashboard → SQL Editor
+-- CLI-managed migration. Apply with: supabase db push
+-- (Originally applied by hand in the Supabase SQL Editor; registered as
+--  already-applied via `supabase migration repair --status applied 003`.)
 
 CREATE TABLE IF NOT EXISTS templates (
   id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
