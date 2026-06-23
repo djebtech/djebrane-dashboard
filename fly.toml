@@ -1,0 +1,28 @@
+# Fly.io config for Djebrane Dashboard (custom Next.js + Socket.io server).
+# Before deploying, set `app` to your Fly app name (see `fly apps list`) and
+# `primary_region` to your preferred region (e.g. cdg = Paris, fra = Frankfurt).
+app = "djebrane-dashboard"
+primary_region = "cdg"
+
+[build]
+
+[env]
+  NODE_ENV = "production"
+  # Pin PORT so the server's listen() and internal_port below always match.
+  PORT = "3000"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  # This app holds long-lived WhatsApp (Baileys) + Socket.io connections in
+  # memory, so keep one machine always up and don't auto-stop it.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "10s"
+    timeout = "5s"
+    grace_period = "30s"
+    method = "GET"
+    path = "/api/health"

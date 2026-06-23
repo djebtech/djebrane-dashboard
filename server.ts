@@ -61,9 +61,11 @@ app.prepare().then(() => {
     process.exit(0);
   });
 
-  httpServer.listen(port, () => {
+  // Bind 0.0.0.0 (all interfaces) so the Fly.io proxy can reach the app —
+  // binding to localhost only would make it unreachable from outside the VM.
+  httpServer.listen(port, "0.0.0.0", () => {
     console.log(`\n  ▲ Djebrane Dashboard (custom server)`);
-    console.log(`  - Local:  http://${hostname}:${port}`);
-    console.log(`  - Socket: ws://${hostname}:${port}/api/socket\n`);
+    console.log(`  - Listening on 0.0.0.0:${port}`);
+    console.log(`  - Socket: ws://0.0.0.0:${port}/api/socket\n`);
   });
 });
