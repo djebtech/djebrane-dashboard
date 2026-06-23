@@ -1,0 +1,33 @@
+# Render Blueprint. Apply via the Render dashboard → New → Blueprint.
+# NOTE: the persistent disk below requires a paid instance type (not Free).
+#       Remove the `disk:` block and the SESSIONS_PATH env var to run on Free,
+#       but WhatsApp sessions will then reset on every deploy/restart.
+services:
+  - type: web
+    name: djebrane-dashboard
+    runtime: node
+    plan: starter
+    # --include=dev: NODE_ENV=production would otherwise skip the devDependencies
+    # that `next build` needs (tailwindcss, postcss, typescript).
+    buildCommand: npm install --include=dev && npm run build
+    # `npm run start` runs the custom server (NODE_ENV=production tsx server.ts),
+    # which carries the Socket.io + Baileys + campaign/sequence engines.
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+      - key: SESSIONS_PATH
+        value: /data/sessions
+    disk:
+      name: sessions-disk
+      mountPath: /data
+      sizeGB: 1

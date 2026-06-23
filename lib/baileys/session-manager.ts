@@ -13,7 +13,9 @@ import path from "path";
 import fs from "fs";
 import { createAdminClient } from "../supabase/admin";
 
-const SESSIONS_DIR = path.join(process.cwd(), "sessions");
+// SESSIONS_PATH lets the host point Baileys creds at a persistent disk
+// (e.g. Render's /data/sessions); falls back to a local folder in dev.
+const SESSIONS_DIR = process.env.SESSIONS_PATH ?? path.join(process.cwd(), "sessions");
 const HEALTH_SYNC_INTERVAL_MS = 30 * 60 * 1000; // 30 min
 const LOGGER = pino({ level: "silent" });
 
